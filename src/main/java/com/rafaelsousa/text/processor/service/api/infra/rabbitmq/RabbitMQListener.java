@@ -1,6 +1,7 @@
 package com.rafaelsousa.text.processor.service.api.infra.rabbitmq;
 
-import com.rafaelsousa.text.processor.service.api.model.PostData;
+import com.rafaelsousa.text.processor.service.api.model.TextProcessorData;
+import com.rafaelsousa.text.processor.service.api.model.TextResultData;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
@@ -19,21 +20,24 @@ public class RabbitMQListener {
     private final RabbitTemplate rabbitTemplate;
 
     @SuppressWarnings("java:S112")
-    @RabbitListener(queues = POST_PROCESSING_QUEUE, concurrency = "2-3")
-    public void handlePostService(@Payload PostData postData) {
-        log.info("Post sent for processing: {}", postData);
+    @RabbitListener(queues = TEXT_PROCESSOR_QUEUE, concurrency = "2-3")
+    public void handlePostService(@Payload TextProcessorData textProcessorData) {
+        log.info("Post sent for processing: {}", textProcessorData);
 
-        if (postData.getTitle().equalsIgnoreCase("Text processing failure test")) {
-            throw new RuntimeException(String.format("Failed to process post with ID: %s", postData.getId()));
+        if (textProcessorData.getPostBody().contains("Text processing failure test")) {
+            throw new RuntimeException(String.format("Failed to process post with ID: %s", textProcessorData.getPostId()));
         }
 
         @SuppressWarnings("WrapperTypeMayBePrimitive")
-        Long numberOfWords = Arrays.stream(postData.getBody().split("\\s+")).count();
+        Long numberOfWords = Arrays.stream(textProcessorData.getPostBody().split("\\s+")).count();
         Double totalValue = numberOfWords * 0.10;
 
-        postData.setWordCount(numberOfWords);
-        postData.setCalculatedValue(totalValue);
+        TextResultData textResultData = TextResultData.builder()
+                .postId(textProcessorData.getPostId())
+                .wordCount(numberOfWords)
+                .calculatedValue(totalValue)
+                .build();
 
-        rabbitTemplate.convertAndSend(FANOUT_EXCHANGE_POST_RECEIVED, FANOUT_ROUTING_KEY, postData);
+        rabbitTemplate.convertAndSend(FANOUT_EXCHANGE_PROCESSING_RESULT, FANOUT_ROUTING_KEY, textResultData);
     }
 }
